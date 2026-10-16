@@ -1,0 +1,2 @@
+Region	Min(pm)	Max(pm)	Mid(pm)	Mean(pm)	Rpv(pm)	Rq(pm)	Ra(pm)	Rz(pm)	Rsk	Rku	
+Whole	-879.824	897.801	8.989	0.000	1777.625	87.021	67.825	1629.465	-0.060	4.075	

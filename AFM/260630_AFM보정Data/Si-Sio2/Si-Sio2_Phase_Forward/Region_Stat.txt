@@ -1,0 +1,2 @@
+Region	Min(deg)	Max(deg)	Mid(deg)	Mean(deg)	Rpv(deg)	Rq(deg)	Ra(deg)	Rz(deg)	Rsk	Rku	
+Whole	-2.440	77.415	37.487	0.006	79.855	0.763	0.392	75.416	50.178	4403.130	

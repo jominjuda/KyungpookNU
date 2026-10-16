@@ -1,0 +1,2 @@
+Region	Min(nm)	Max(nm)	Mid(nm)	Mean(nm)	Rpv(nm)	Rq(nm)	Ra(nm)	Rz(nm)	Rsk	Rku	
+Whole	-0.881	1.018	0.068	0.000	1.899	0.046	0.036	1.614	0.044	8.616	
