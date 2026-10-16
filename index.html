@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>XIAO BLE Strain Sensor Plotter</title>
+<style>
+:root{
+  --bg:#f3f6fb; --card:#ffffff; --card2:#f8fafc; --text:#172033; --muted:#5d6b82;
+  --line:#2563eb; --border:#c9d4e5; --grid:rgba(80,100,130,.18);
+  --primary:#2563eb; --danger:#dc2626; --good:#16a34a; --warn:#f59e0b;
+}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:1180px;margin:auto;padding:14px}
+h1{font-size:22px;margin:8px 0}.sub{color:var(--muted);font-size:13px;line-height:1.45}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;margin:12px 0;box-shadow:0 6px 18px rgba(20,35,60,.06)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,input,select,textarea{border-radius:12px;border:1px solid var(--border);background:#ffffff;color:var(--text);padding:10px 12px;font-size:14px;box-sizing:border-box}
+button{font-weight:800;background:#edf2fa;box-shadow:0 2px 0 rgba(80,100,130,.22);transition:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none}
+button:hover{filter:brightness(.98)}
+button:active,button.pressed{transform:translateY(1px) scale(.97);box-shadow:0 0 0 rgba(80,100,130,0);filter:brightness(.88)}
+.primary{background:var(--primary);border-color:#1d4ed8;color:white}.danger{background:var(--danger);border-color:#b91c1c;color:white}.good{background:var(--good);border-color:#15803d;color:white}.warn{background:var(--warn);border-color:#d97706;color:#1f2937}
+button:disabled{opacity:.45}.activeLive{outline:3px solid #86efac;outline-offset:2px}.liveToggle{display:flex;align-items:center;gap:8px;background:#ecfdf5;border:1px solid #86efac;border-radius:12px;padding:10px 12px;font-weight:800;color:#166534;user-select:none;touch-action:manipulation}.liveToggle input{width:20px;height:20px;accent-color:#16a34a}
+.field{flex:1 1 160px;min-width:140px}.smallField{flex:1 1 120px;min-width:110px}
+.uuidField{flex:1 1 250px;min-width:220px;max-width:345px}
+.customPair{display:flex;gap:6px}.customPair input{width:50%;min-width:0;padding-left:8px;padding-right:8px}
+.field input,.field select{width:100%}
+.uuidField input{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;letter-spacing:-.7px;overflow-x:auto;white-space:nowrap}
+label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+.checks{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.checkItem{background:#f8fafc;border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;gap:8px;align-items:center;color:var(--text)}
+.checkItem:active,.checkItem.pressed{background:#dbeafe;transform:scale(.99)}.checkItem.selected{background:#dbeafe;border-color:#60a5fa;box-shadow:inset 0 0 0 1px #60a5fa}.checkItem input{width:20px;height:20px;accent-color:#2563eb}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{background:#f8fafc;border:1px solid var(--border);border-radius:14px;padding:10px}.name{color:var(--muted);font-size:12px}.val{font-size:18px;font-weight:900;margin-top:4px;color:#0f172a}
+.graphGrid{display:grid;grid-template-columns:1fr;gap:14px}.graphCard{background:#ffffff;border:1px solid var(--border);border-radius:16px;padding:12px;box-shadow:0 6px 18px rgba(20,35,60,.06)}
+.graphTitle{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:8px}.graphTitle b{font-size:15px}.graphTitle span{font-size:12px;color:var(--muted);text-align:right}
+canvas{width:100%;height:420px;display:block;background:#ffffff;border-radius:14px;border:1px solid var(--border);touch-action:none;cursor:grab;box-shadow:inset 0 0 0 1px rgba(0,0,0,.01)}
+canvas:active{cursor:grabbing}
+#csvBox{width:100%;height:180px;display:none;font-family:monospace;font-size:12px;margin-top:10px;white-space:pre}
+.status{white-space:pre-wrap;color:var(--muted);font-size:13px;line-height:1.45}.ok{color:#15803d}.bad{color:#dc2626}.warnText{color:#b45309}.hint{color:var(--muted);font-size:12px;margin-top:8px;line-height:1.45}
+code{background:#eef2f7;border:1px solid var(--border);border-radius:6px;padding:1px 5px}.muted{opacity:.45}
+@media(max-width:900px){.checks{grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:repeat(2,1fr)}.uuidField{flex:1 1 100%;max-width:none;min-width:100%}.smallField{flex:1 1 45%}canvas{height:360px}}
+</style>
+</head>
+<body>
+<main>
+<h1>XIAO BLE Strain Sensor Plotter</h1>
+<div class="sub">ADC Raw, Resistance, ΔR/R0를 실시간으로 확인하고 CSV로 저장하는 측정 페이지입니다.</div>
+
+<section class="card">
+<div class="row">
+<button id="connectBtn" class="primary">BLE 연결</button>
+<button id="disconnectBtn" class="danger" disabled>연결 해제</button>
+<button id="pauseBtn">일시정지</button>
+<label class="liveToggle"><input id="liveFollow" type="checkbox" checked> 실시간 따라가기</label>
+<button id="resetZoomBtn">줌 초기화</button>
+<button id="clearBtn">초기화</button>
+<button id="demoBtn" class="good">Demo</button>
+</div>
+<div style="height:10px"></div>
+<div class="row">
+<button id="csvBtn">CSV 파일 저장</button>
+<button id="showCsvBtn" class="warn">CSV 화면 표시</button>
+<button id="copyCsvBtn">CSV 복사</button>
+<button id="shareCsvBtn">CSV 공유</button>
+</div>
+
+<div style="height:10px"></div>
+<div class="row">
+<div class="field uuidField"><label>Service UUID</label><input id="serviceUuid" value="0000ffe0-0000-1000-8000-00805f9b34fb"></div>
+<div class="field uuidField"><label>Data Characteristic UUID</label><input id="charUuid" value="0000ffe1-0000-1000-8000-00805f9b34fb"></div>
+<div class="field uuidField"><label>Command Characteristic UUID</label><input id="cmdUuid" value="0000ffe2-0000-1000-8000-00805f9b34fb"></div>
+<div class="field smallField"><label>Plot Window</label><input id="windowSize" type="number" min="10" max="100000" step="10" value="100"></div>
+</div>
+
+<div style="height:10px"></div>
+<div class="row">
+<div class="field smallField"><label>실제 꽂은 Rref [Ω]</label><input id="rrefInput" type="number" min="1" step="1" value="5100"></div>
+<button id="setRrefBtn" class="primary" disabled>Set Rref</button>
+<button id="calR0Btn" disabled>Calibrate R0</button>
+<button id="setRrefCalBtn" class="primary" disabled>Set Rref + Calibrate</button>
+<div class="field"><label>Rref 상태</label><div id="cmdStatus" class="status">명령 대기 중</div></div>
+</div>
+<div class="hint">실제 회로의 Rref와 사이트 입력값을 같게 맞추세요. Rref 변경 후에는 센서를 건드리지 않은 상태에서 R0를 다시 보정하는 것이 좋습니다.</div>
+<div style="height:8px"></div>
+<div class="row">
+<button id="recommendRrefBtn" class="good">현재 Raw로 추천 Rref 계산</button>
+<button id="waveRecommendRrefBtn" class="warn">동작 파형으로 추천 Rref 계산</button>
+<div class="field"><label>추천 기준저항</label><div id="rrefRecommend" class="status">무변형 기준 또는 동작 파형 기준으로 추천값을 계산할 수 있습니다.</div></div>
+</div>
+
+<div class="row">
+<div class="field smallField"><label>Raw Scale</label><select id="rawScale"><option value="auto">Auto</option><option value="adc12" selected>0~4095</option><option value="custom">사용자 지정</option></select></div>
+<div class="field smallField"><label>Raw Min / Max</label><div class="customPair"><input id="rawMin" type="number" value="0"><input id="rawMax" type="number" value="4095"></div></div>
+<div class="field smallField"><label>Resistance Scale</label><select id="resScale"><option value="auto" selected>Auto</option><option value="custom">사용자 지정</option></select></div>
+<div class="field smallField"><label>Resistance Min / Max</label><div class="customPair"><input id="resMin" type="number" value="0"><input id="resMax" type="number" value="1000"></div></div>
+<div class="field smallField"><label>Delta Scale</label><select id="deltaScale"><option value="auto" selected>Auto</option><option value="custom">사용자 지정</option></select></div>
+<div class="field smallField"><label>Delta Min / Max</label><div class="customPair"><input id="deltaMin" type="number" value="-1" step="0.1"><input id="deltaMax" type="number" value="1" step="0.1"></div></div>
+</div>
+
+<div class="checks">
+<label class="checkItem"><input type="checkbox" class="channelCheck" value="raw"> Raw ADC</label>
+<label class="checkItem"><input type="checkbox" class="channelCheck" value="resistance"> Resistance Ω</label>
+<label class="checkItem"><input type="checkbox" class="channelCheck" value="deltaRaw" checked> ΔR/R0 %</label>
+</div>
+
+<textarea id="csvBox" readonly></textarea>
+</section>
+
+<section class="card"><div class="stats">
+<div class="stat"><div class="name">Time</div><div id="timeVal" class="val">0 ms</div></div>
+<div class="stat"><div class="name">Raw</div><div id="rawVal" class="val">-</div></div>
+<div class="stat"><div class="name">Resistance</div><div id="resVal" class="val">-</div></div>
+<div class="stat"><div class="name">ΔR/R0</div><div id="dRawVal" class="val">-</div></div>
+</div></section>
+
+<section id="graphs" class="graphGrid"></section>
+
+<section class="card"><div id="status" class="status">상태: 대기 중
+Bluefy/Chrome/Edge에서 열고 BLE 연결을 누르세요.</div></section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+let device=null,server=null,chara=null,cmdChara=null,samples=[],paused=false,buf="",demo=null;
+let followLive=true,viewEnd=0;
+const SAMPLE_INTERVAL_MS = 50;
+let drag=null;
+let touchGesture=null;
+let yView={};
+const labels={raw:"Raw ADC",resistance:"Resistance Ω",deltaRaw:"ΔR/R0 %"};
+const units={raw:"count",resistance:"Ω",deltaRaw:"%"};
+const fixed={raw:1,resistance:1,deltaRaw:3};
+function customPair(minId,maxId){const a=parseFloat($(minId).value),b=parseFloat($(maxId).value);return Number.isFinite(a)&&Number.isFinite(b)&&a<b?[a,b]:null}
+function fixedScaleFor(ch){
+  // 그래프 휠 확대/축소로 잡힌 Y축 범위가 있으면 우선 적용
+  if(yView[ch] && Number.isFinite(yView[ch][0]) && Number.isFinite(yView[ch][1]) && yView[ch][0] < yView[ch][1]) return yView[ch];
+
+  if(ch==="raw"){
+    const v=$("rawScale").value;
+    if(v==="adc12") return [0,4095];
+    if(v==="custom") return customPair("rawMin","rawMax");
+    return null;
+  }
+  if(ch==="resistance"){
+    const v=$("resScale").value;
+    if(v==="custom") return customPair("resMin","resMax");
+    return null;
+  }
+  if(ch==="deltaRaw"){
+    const v=$("deltaScale").value;
+    if(v==="custom") return customPair("deltaMin","deltaMax");
+    return null;
+  }
+  return null;
+}
+function updateCustomUI(){
+  const map=[['rawScale','rawMin','rawMax'],['resScale','resMin','resMax'],['deltaScale','deltaMin','deltaMax']];
+  for(const [sel,min,max] of map){
+    const on=$(sel).value==='custom';
+    [$(min),$(max)].forEach(el=>{el.disabled=!on;el.classList.toggle('muted',!on)});
+  }
+}
+function st(m,cls=""){ $("status").className="status "+cls; $("status").textContent=m; }
+function selectedChannels(){return [...document.querySelectorAll(".channelCheck:checked")].map(x=>x.value)}
+function fmt(k,v){if(!Number.isFinite(v))return "-"; return v.toFixed(fixed[k])}
+function add(o){
+  // t는 브라우저 수신 시간, ms는 실제 CSV/표시용 시간축
+  // XIAO가 time_ms를 보내면 그 값을 사용하고, 없으면 샘플 번호×50 ms로 생성
+  if(!Number.isFinite(o.ms)) o.ms = samples.length * SAMPLE_INTERVAL_MS;
+  samples.push({t:Date.now(),...o});
+  if(samples.length>100000)samples.splice(0,samples.length-100000);
+  if(followLive)viewEnd=samples.length;
+  stats();
+  updateRrefRecommendation(false);
+  if($("csvBox").style.display=="block")$("csvBox").value=csvView();
+  if(!paused)drawAll();
+}
+function relativeMs(s){
+  if(!s || !Number.isFinite(s.ms)) return 0;
+  const base = (samples.length && Number.isFinite(samples[0].ms)) ? samples[0].ms : 0;
+  return Math.max(0, Math.round(s.ms - base));
+}
+function elapsedLabel(s){
+  return relativeMs(s) + " ms";
+}
+function stats(){
+  const s=samples[samples.length-1];
+  if(!s){$("timeVal").textContent="0 ms";["rawVal","resVal","dRawVal"].forEach(id=>$(id).textContent="-");return;}
+  $("timeVal").textContent=elapsedLabel(s);
+  $("rawVal").textContent=fmt("raw",s.raw);
+  $("resVal").textContent=fmt("resistance",s.resistance);
+  $("dRawVal").textContent=fmt("deltaRaw",s.deltaRaw);
+}
+function ensureGraphs(){
+  const wrap=$("graphs"); wrap.className="graphGrid";
+  const chans=selectedChannels(); wrap.innerHTML="";
+  if(chans.length===0){
+    const div=document.createElement("section"); div.className="graphCard";
+    div.innerHTML="<div class='graphTitle'><b>표시할 항목을 체크하세요</b><span>-</span></div>"; wrap.appendChild(div); return;
+  }
+  for(const ch of chans){
+    const card=document.createElement("section"); card.className="graphCard";
+    card.innerHTML=`<div class="graphTitle"><b>${labels[ch]}</b><span id="range_${ch}">-</span></div><canvas id="canvas_${ch}" data-channel="${ch}"></canvas>`;
+    wrap.appendChild(card);
+  }
+  resizeCanvases();
+  setupCanvasDrag();
+}
+function resizeCanvases(){
+  document.querySelectorAll("canvas").forEach(c=>{const r=c.getBoundingClientRect(),d=window.devicePixelRatio||1;c.width=r.width*d;c.height=r.height*d;const ctx=c.getContext("2d");ctx.setTransform(d,0,0,d,0,0);});
+  drawAll();
+}
+window.addEventListener("resize",resizeCanvases);
+function setLive(on){
+  followLive=on;
+  if(on)viewEnd=samples.length;
+  const lf=$("liveFollow");
+  if(lf)lf.checked=on;
+  drawAll();
+}
+function currentWindowBounds(){
+  const win=parseInt($("windowSize").value);
+  const len=samples.length;
+  let end=followLive?len:(viewEnd||len);
+  end=Math.max(Math.min(end,len),Math.min(win,len));
+  const start=Math.max(0,end-win);
+  return {start,end,win,len};
+}
+function viewData(ch){
+  const {start,end}=currentWindowBounds();
+  return samples.slice(start,end).filter(s=>Number.isFinite(s[ch]));
+}
+function currentYRange(ch){
+  const old=yView[ch];
+  if(old) return old;
+  // 임시로 auto/full/custom 현재 범위를 계산
+  const fs=(function(){
+    if(ch==="raw"){
+      const v=$("rawScale").value;
+      if(v==="adc12") return [0,4095];
+      if(v==="custom") return customPair("rawMin","rawMax");
+      return null;
+    }
+    if(ch==="resistance"){
+      if($("resScale").value==="custom") return customPair("resMin","resMax");
+      return null;
+    }
+    if(ch==="deltaRaw"){
+      if($("deltaScale").value==="custom") return customPair("deltaMin","deltaMax");
+      return null;
+    }
+    return null;
+  })();
+  if(fs) return fs;
+  const data=viewData(ch);
+  const vs=data.map(s=>s[ch]).filter(Number.isFinite);
+  if(vs.length<2) return [-1,1];
+  let ymin=Math.min(...vs), ymax=Math.max(...vs);
+  if(ymin===ymax){ymin-=1;ymax+=1;}
+  const m=(ymax-ymin)*0.12;
+  return [ymin-m,ymax+m];
+}
+function zoomY(ch, factor, anchorRatio){
+  const r=currentYRange(ch);
+  let [ymin,ymax]=r;
+  const center=ymin+(ymax-ymin)*(1-anchorRatio);
+  let newMin=center-(center-ymin)*factor;
+  let newMax=center+(ymax-center)*factor;
+  if(newMax-newMin>1e-12){yView[ch]=[newMin,newMax];drawAll();}
+}
+function panY(ch, startRange, dy, pixelHeight){
+  if(!startRange)return;
+  const [ymin,ymax]=startRange;
+  const yr=ymax-ymin;
+  if(!Number.isFinite(yr)||yr<=0)return;
+  // 손가락/마우스를 아래로 내리면 보이는 범위도 아래쪽으로 이동
+  const shift=dy*yr/Math.max(1,pixelHeight);
+  yView[ch]=[ymin+shift,ymax+shift];
+}
+function zoomX(factor){
+  const input=$("windowSize");
+  let win=parseInt(input.value)||100;
+  win=Math.round(Math.max(10,Math.min(100000,win*factor)));
+  input.value=win;
+  if(followLive)viewEnd=samples.length;
+  drawAll();
+}
+function resetZoom(){yView={};drawAll();}
+function drawAll(){for(const ch of selectedChannels())drawGraph(ch)}
+function drawGraph(ch){
+  const c=$("canvas_"+ch); if(!c)return;
+  const x=c.getContext("2d");
+  const r=c.getBoundingClientRect(),w=r.width,h=r.height,p={l:58,r:14,t:14,b:30};
+  x.clearRect(0,0,w,h); x.fillStyle="#ffffff"; x.fillRect(0,0,w,h);
+  x.strokeStyle="rgba(80,100,130,.18)";
+  for(let i=0;i<=5;i++){let y=p.t+(h-p.t-p.b)*i/5; x.beginPath();x.moveTo(p.l,y);x.lineTo(w-p.r,y);x.stroke();}
+  for(let i=0;i<=6;i++){let xx=p.l+(w-p.l-p.r)*i/6; x.beginPath();x.moveTo(xx,p.t);x.lineTo(xx,h-p.b);x.stroke();}
+  const bounds=currentWindowBounds();
+  const data=viewData(ch);
+  if(data.length<2){x.fillStyle="#5d6b82";x.font="13px sans-serif";x.fillText("데이터 대기 중...",p.l,p.t+24);return;}
+  let ymin,ymax;
+  const fs=fixedScaleFor(ch);
+  if(fs){[ymin,ymax]=fs;} else {
+    const vs=data.map(s=>s[ch]); ymin=Math.min(...vs); ymax=Math.max(...vs);
+    if(ymin===ymax){ymin-=1;ymax+=1;}
+    const m=(ymax-ymin)*0.12; ymin-=m; ymax+=m;
+  }
+  const rangeEl=$("range_"+ch);
+  if(rangeEl){
+    const live=followLive?"LIVE":"PAUSED VIEW";
+    const tStart=data.length?relativeMs(data[0])/1000:0;
+    const tEnd=data.length?relativeMs(data[data.length-1])/1000:0;
+    rangeEl.textContent=`${ymin.toFixed(fixed[ch])} ~ ${ymax.toFixed(fixed[ch])} ${units[ch]} · ${tStart.toFixed(1)}-${tEnd.toFixed(1)}s · ${bounds.start+1}-${bounds.end}/${bounds.len} · ${live}`;
+  }
+  const pw=w-p.l-p.r,ph=h-p.t-p.b;
+  x.fillStyle="rgba(23,32,51,.72)";x.font="12px sans-serif";
+  x.fillText(ymax.toFixed(fixed[ch]),8,p.t+4); x.fillText(ymin.toFixed(fixed[ch]),8,h-p.b);
+
+  // X축 시간 표시: 첫 수신 샘플 기준 상대 시간(s)
+  x.textAlign="center";
+  x.fillStyle="rgba(93,107,130,.9)";
+  for(let i=0;i<=6;i++){
+    const xx=p.l+pw*i/6;
+    const idx=Math.min(data.length-1,Math.max(0,Math.round((data.length-1)*i/6)));
+    const sec=relativeMs(data[idx])/1000;
+    x.fillText(sec.toFixed(1)+"s",xx,h-10);
+  }
+  x.textAlign="left";
+
+  x.strokeStyle="#2563eb"; x.lineWidth=2; x.beginPath();
+  data.forEach((s,i)=>{let xx=p.l+pw*i/(data.length-1);let yy=p.t+ph*(1-(s[ch]-ymin)/(ymax-ymin));if(i)x.lineTo(xx,yy);else x.moveTo(xx,yy);});
+  x.stroke();
+}
+function graphPixelHeight(canvas){
+  const r=canvas.getBoundingClientRect();
+  return Math.max(1,r.height-44);
+}
+function panXFromDrag(startEnd,startX,currentX,canvas){
+  const rect=canvas.getBoundingClientRect();
+  const win=parseInt($("windowSize").value)||100;
+  const dx=currentX-startX;
+  const perPx=win/Math.max(1,rect.width-72);
+  let newEnd=Math.round(startEnd-dx*perPx);
+  const len=samples.length;
+  newEnd=Math.max(Math.min(newEnd,len),Math.min(win,len));
+  viewEnd=newEnd;
+}
+function setupCanvasDrag(){
+  document.querySelectorAll('canvas').forEach(c=>{
+    c.onpointerdown=e=>{
+      if(e.pointerType==='touch')return;
+      if(samples.length<2)return;
+      c.setPointerCapture(e.pointerId);
+      const ch=c.dataset.channel;
+      drag={x:e.clientX,y:e.clientY,startEnd:(followLive?samples.length:viewEnd||samples.length),canvas:c,ch,startRange:currentYRange(ch)};
+      // 실시간 따라가기는 드래그로 자동 해제하지 않음. 체크박스로만 제어.
+    };
+    c.onpointermove=e=>{
+      if(!drag||drag.canvas!==c||e.pointerType==='touch')return;
+      panXFromDrag(drag.startEnd,drag.x,e.clientX,c);
+      panY(drag.ch,drag.startRange,e.clientY-drag.y,graphPixelHeight(c));
+      drawAll();
+    };
+    c.onpointerup=e=>{if(e.pointerType!=='touch')drag=null;};
+    c.onpointercancel=e=>{if(e.pointerType!=='touch')drag=null;};
+    c.onwheel=e=>{
+      e.preventDefault();
+      const rect=c.getBoundingClientRect();
+      const ch=c.dataset.channel;
+      const factor=e.deltaY<0?0.82:1.22;
+      if(e.shiftKey || Math.abs(e.deltaX)>Math.abs(e.deltaY)) zoomX(factor);
+      else {const anchor=(e.clientY-rect.top)/Math.max(1,rect.height); zoomY(ch,factor,Math.max(0,Math.min(1,anchor)));}
+    };
+    c.ondblclick=e=>{const ch=c.dataset.channel; delete yView[ch]; st(labels[ch]+' Y축 줌 초기화됨','ok'); drawAll();};
+    c.addEventListener('touchstart',touchStart,{passive:false});
+  });
+}
+function touchCenter(touches){
+  let x=0,y=0;
+  for(let i=0;i<touches.length;i++){x+=touches[i].clientX;y+=touches[i].clientY;}
+  return {x:x/touches.length,y:y/touches.length};
+}
+function touchDistance(touches){
+  if(touches.length<2)return 1;
+  const a=touches[0],b=touches[1];
+  return Math.max(1,Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY));
+}
+function touchStart(e){
+  const c=e.currentTarget;
+  if(samples.length<2)return;
+  const ch=c.dataset.channel;
+  const cen=touchCenter(e.touches);
+  if(e.touches.length===1){
+    touchGesture={mode:'pan',x:cen.x,y:cen.y,startEnd:(followLive?samples.length:viewEnd||samples.length),canvas:c,ch,startRange:currentYRange(ch)};
+    // 실시간 따라가기는 드래그로 자동 해제하지 않음. 체크박스로만 제어.
+  }else if(e.touches.length>=2){
+    const a=e.touches[0], b=e.touches[1];
+    const startSpanX=Math.abs(b.clientX-a.clientX);
+    const startSpanY=Math.abs(b.clientY-a.clientY);
+    touchGesture={mode:'pinch',x:cen.x,y:cen.y,startSpanX,startSpanY,ch,range:currentYRange(ch),win:parseInt($("windowSize").value)||100,startEnd:(followLive?samples.length:viewEnd||samples.length),canvas:c,axis:null};
+    // 핀치 확대/축소는 실시간 따라가기를 끄지 않음
+  }
+  e.preventDefault();
+}
+function touchMove(e){
+  if(!touchGesture)return;
+  const c=touchGesture.canvas;
+  if(!c)return;
+  if(touchGesture.mode==='pan' && e.touches.length===1){
+    const cen=touchCenter(e.touches);
+    panXFromDrag(touchGesture.startEnd,touchGesture.x,cen.x,c);
+    panY(touchGesture.ch,touchGesture.startRange,cen.y-touchGesture.y,graphPixelHeight(c));
+    drawAll();
+  }else if(touchGesture.mode==='pinch' && e.touches.length>=2){
+    const cen=touchCenter(e.touches);
+    const a=e.touches[0], b=e.touches[1];
+    const curSpanX=Math.abs(b.clientX-a.clientX);
+    const curSpanY=Math.abs(b.clientY-a.clientY);
+    const deltaSpanX=curSpanX-touchGesture.startSpanX;
+    const deltaSpanY=curSpanY-touchGesture.startSpanY;
+    const changeX=Math.abs(deltaSpanX);
+    const changeY=Math.abs(deltaSpanY);
+
+    // 첫 핀치 방향을 한 번만 판단하고, 손을 뗄 때까지 축을 고정한다.
+    // 비율 방식은 두 손가락이 거의 수직/수평으로 놓였을 때 분모가 작아 튀므로,
+    // 픽셀 간격 변화량 기반으로 판정/확대한다.
+    if(!touchGesture.axis){
+      const threshold=10; // 너무 작은 움직임은 아직 축 결정하지 않음
+      if(Math.max(changeX,changeY)<threshold){e.preventDefault();return;}
+      touchGesture.axis = changeX>=changeY ? 'x' : 'y';
+    }
+
+    if(touchGesture.axis==='x'){
+      // 가로 방향 핀치: X축, 즉 Plot Window만 변경. Y축은 건드리지 않음.
+      // 가로 간격을 벌리면 window가 작아져 확대, 좁히면 window가 커져 축소.
+      const factor=Math.exp(-deltaSpanX/240);
+      $("windowSize").value=Math.round(Math.max(10,Math.min(100000,touchGesture.win*factor)));
+      panXFromDrag(touchGesture.startEnd,touchGesture.x,cen.x,c);
+    }else{
+      // 세로 방향 핀치: Y축만 확대/축소. Plot Window는 건드리지 않음.
+      // 세로 간격을 벌리면 Y 범위가 작아져 확대, 좁히면 Y 범위가 커져 축소.
+      const factor=Math.exp(-deltaSpanY/240);
+      const [ymin,ymax]=touchGesture.range;
+      const center=(ymin+ymax)/2;
+      const half=(ymax-ymin)*factor/2;
+      if(half>1e-12)yView[touchGesture.ch]=[center-half,center+half];
+      panY(touchGesture.ch,yView[touchGesture.ch],cen.y-touchGesture.y,graphPixelHeight(c));
+    }
+    drawAll();
+  }
+  e.preventDefault();
+}
+function touchEnd(e){
+  if(touchGesture && e.touches.length===0){touchGesture=null;e.preventDefault();}
+}
+document.addEventListener('touchmove',touchMove,{passive:false});
+document.addEventListener('touchend',touchEnd,{passive:false});
+document.addEventListener('touchcancel',e=>{touchGesture=null;},{passive:false});
+function parseLine(line){
+  let nums=line.trim().match(/-?\d+(\.\d+)?/g); if(!nums)return; nums=nums.map(parseFloat);
+  // 권장 형식: time_ms,Raw,Resistance,Delta
+  // 이전 3개 형식: Raw,Resistance,Delta 도 자동 호환하며 시간은 50ms 간격으로 생성
+  if(nums.length===4)add({ms:nums[0],raw:nums[1],resistance:nums[2],deltaRaw:nums[3]});
+  else if(nums.length>=5)add({raw:nums[0],resistance:nums[1],deltaRaw:nums[3]});
+  else if(nums.length>=3)add({raw:nums[0],resistance:nums[1],deltaRaw:nums[2]});
+}
+function parseText(t){buf+=t;const parts=buf.split(/\r?\n/);buf=parts.pop();parts.forEach(parseLine);}
+function fmtOhm(v){
+  if(!Number.isFinite(v)||v<=0)return "-";
+  if(v>=1000000)return (v/1000000).toFixed(2).replace(/\.00$/,"")+" MΩ";
+  if(v>=1000)return (v/1000).toFixed(2).replace(/\.00$/,"")+" kΩ";
+  return v.toFixed(1).replace(/\.0$/,"")+" Ω";
+}
+function nearestE12(v){
+  if(!Number.isFinite(v)||v<=0)return null;
+  const base=[10,12,15,18,22,27,33,39,47,56,68,82];
+  let best=null,err=Infinity;
+  for(let decade=0.1;decade<=10000000;decade*=10){
+    for(const b of base){
+      const r=b*decade;
+      const e=Math.abs(Math.log(r/v));
+      if(e<err){err=e;best=r;}
+    }
+  }
+  return best;
+}
+function resistanceFromRawAndRref(raw,rref){
+  const ADC=4095;
+  if(!Number.isFinite(raw)||!Number.isFinite(rref)||rref<=0)return null;
+  if(raw<20||raw>4075)return null;
+  return rref*raw/(ADC-raw);
+}
+function percentile(arr,p){
+  if(!arr.length)return null;
+  const a=[...arr].sort((x,y)=>x-y);
+  const idx=(a.length-1)*p;
+  const lo=Math.floor(idx),hi=Math.ceil(idx);
+  if(lo===hi)return a[lo];
+  return a[lo]+(a[hi]-a[lo])*(idx-lo);
+}
+function rawFromResistanceAndRref(rs,rref){
+  const ADC=4095;
+  if(!Number.isFinite(rs)||!Number.isFinite(rref)||rs<=0||rref<=0)return null;
+  return ADC*rs/(rref+rs);
+}
+function recommendRrefFromWaveform(){
+  const box=$("rrefRecommend");
+  if(!box)return;
+  if(samples.length<10){box.textContent="데이터가 너무 적습니다. 초기화 후 센서를 실제로 몇 번 움직인 다음 계산하세요.";return;}
+  const rref=parseFloat($("rrefInput").value);
+  if(!Number.isFinite(rref)||rref<=0){box.textContent="현재 꽂은 Rref 값을 먼저 올바르게 입력하세요.";return;}
+
+  // 순간 튐을 피하기 위해 전체 파형의 최솟값/최댓값 대신 5%~95% 구간 사용
+  const raws=samples.map(s=>s.raw).filter(v=>Number.isFinite(v)&&v>20&&v<4075);
+  if(raws.length<10){box.textContent="유효한 Raw 데이터가 부족합니다. Raw가 0 또는 4095 근처면 현재 Rref가 너무 안 맞을 수 있습니다.";return;}
+
+  const rawLo=percentile(raws,0.05);
+  const rawHi=percentile(raws,0.95);
+  const rLo=resistanceFromRawAndRref(rawLo,rref);
+  const rHi=resistanceFromRawAndRref(rawHi,rref);
+  if(rLo===null||rHi===null){box.textContent="파형 범위로 저항을 계산할 수 없습니다.";return;}
+
+  const rMin=Math.min(rLo,rHi);
+  const rMax=Math.max(rLo,rHi);
+  const ideal=Math.sqrt(rMin*rMax); // 파형 전체가 ADC 중앙 근처에 오도록 하는 대표값
+  const std=nearestE12(ideal);
+  const predLo=rawFromResistanceAndRref(rMin,std);
+  const predHi=rawFromResistanceAndRref(rMax,std);
+
+  let note="";
+  if(predLo<800||predHi>3300){
+    note="파형 저항 범위가 넓어서 단일 Rref로는 ADC 중앙 영역에 모두 넣기 어렵습니다. 그래도 위 값이 전체 범위를 가장 무난하게 잡는 쪽입니다.";
+  }else{
+    note="이 값이면 동작 파형 대부분이 ADC 사용하기 좋은 범위에 들어올 가능성이 큽니다.";
+  }
+
+  box.innerHTML=`파형 Raw 범위(5~95%) <b>${rawLo.toFixed(1)} ~ ${rawHi.toFixed(1)}</b><br>`+
+    `추정 센서 저항 범위 <b>${fmtOhm(rMin)} ~ ${fmtOhm(rMax)}</b><br>`+
+    `동작 파형 기준 추천 Rref ≈ <b>${fmtOhm(ideal)}</b> / 가까운 표준값: <b>${fmtOhm(std)}</b><br>`+
+    `추천 Rref 사용 시 예상 Raw 범위 ≈ <b>${predLo.toFixed(0)} ~ ${predHi.toFixed(0)}</b><br>`+
+    `${note}`;
+  st("동작 파형 기준 추천 Rref 계산 완료: "+fmtOhm(std),"ok");
+}
+function updateRrefRecommendation(showStatus=false){
+  const box=$("rrefRecommend");
+  if(!box)return;
+  if(!samples.length){box.textContent="아직 수신된 Raw 데이터가 없습니다.";return;}
+  const last=samples[samples.length-1];
+  const rref=parseFloat($("rrefInput").value);
+  const raw=last.raw;
+  const rs=resistanceFromRawAndRref(raw,rref);
+  if(rs===null){box.textContent="Raw가 너무 낮거나 높아서 추천이 불안정합니다. 현재 Raw: "+raw;return;}
+
+  const ADC=4095;
+  const target=2048;
+  const low=1000;
+  const high=3000;
+  const ideal=rs*(ADC-target)/target;
+  const minR=rs*(ADC-high)/high;
+  const maxR=rs*(ADC-low)/low;
+  const std=nearestE12(ideal);
+  const currentRawState=raw<800?"현재 Raw가 낮음 → Rref를 줄이는 쪽이 유리":(raw>3300?"현재 Raw가 높음 → Rref를 키우는 쪽이 유리":"현재 Raw 범위는 무난함");
+
+  box.innerHTML=`현재 Raw <b>${raw.toFixed(1)}</b>, 현재 계산 Rsensor ≈ <b>${fmtOhm(rs)}</b><br>`+
+    `추천 Rref ≈ <b>${fmtOhm(ideal)}</b> / 가까운 표준값: <b>${fmtOhm(std)}</b><br>`+
+    `권장 범위(raw ${low}~${high} 목표): <b>${fmtOhm(minR)} ~ ${fmtOhm(maxR)}</b><br>`+
+    `${currentRawState}`;
+  if(showStatus)st("추천 Rref 계산 완료: "+fmtOhm(std),"ok");
+}
+function setCommandButtons(on){
+  ["setRrefBtn","calR0Btn","setRrefCalBtn"].forEach(id=>{const el=$(id);if(el)el.disabled=!on;});
+}
+async function writeCommand(cmd){
+  if(!cmdChara){
+    if($("cmdStatus"))$("cmdStatus").textContent="명령 characteristic이 없습니다. 새 펌웨어가 올라갔는지 확인하세요.";
+    return false;
+  }
+  try{
+    await cmdChara.writeValue(new TextEncoder().encode(cmd+"\n"));
+    if($("cmdStatus"))$("cmdStatus").textContent="전송 완료: "+cmd;
+    st("명령 전송: "+cmd,"ok");
+    return true;
+  }catch(e){
+    if($("cmdStatus"))$("cmdStatus").textContent="명령 전송 실패: "+e.message;
+    st("명령 전송 실패:\n"+e.message,"bad");
+    return false;
+  }
+}
+async function setRrefFromInput(){
+  const v=parseFloat($("rrefInput").value);
+  if(!Number.isFinite(v)||v<=0){st("Rref 값을 올바르게 입력하세요.","bad");return;}
+  await writeCommand("RREF="+v);
+}
+async function calibrateR0FromSite(){
+  if($("cmdStatus"))$("cmdStatus").textContent="CAL 전송. 3초 동안 센서를 건드리지 마세요.";
+  await writeCommand("CAL");
+}
+async function setRrefAndCalibrateFromSite(){
+  const ok=await setRrefFromInput();
+  setTimeout(()=>calibrateR0FromSite(),250);
+}
+
+function notify(e){let t="";try{t=new TextDecoder().decode(e.target.value)}catch{} if(t&&/[-\d.]/.test(t))parseText(t);}
+async function connect(){
+  if(!navigator.bluetooth){st("이 브라우저는 Web Bluetooth를 지원하지 않습니다. Bluefy나 Chrome/Edge에서 열어야 합니다.","bad");return;}
+  stopDemo();
+  try{
+    const svc=$("serviceUuid").value.trim().toLowerCase(),cu=$("charUuid").value.trim().toLowerCase(),cmdUuid=$("cmdUuid").value.trim().toLowerCase();
+    st("BLE 기기 검색 중...","warnText");
+    device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[svc]});
+    device.addEventListener("gattserverdisconnected",disc);
+    server=await device.gatt.connect();
+    const service=await server.getPrimaryService(svc);
+    chara=await service.getCharacteristic(cu);
+
+    // Rref/CAL 명령용 characteristic. 구버전 펌웨어면 없을 수 있음.
+    try{
+      cmdChara=await service.getCharacteristic(cmdUuid);
+      setCommandButtons(true);
+      if($("cmdStatus")) $("cmdStatus").textContent="Rref 명령 characteristic 연결됨";
+    }catch(e){
+      cmdChara=null;
+      setCommandButtons(false);
+      if($("cmdStatus")) $("cmdStatus").textContent="FFE2 명령 characteristic 없음: 새 펌웨어 업로드 필요";
+    }
+
+    await chara.startNotifications();
+    chara.addEventListener("characteristicvaluechanged",notify);
+    $("connectBtn").disabled=true;$("disconnectBtn").disabled=false;
+    st("연결됨: "+(device.name||"BLE Device"),"ok");
+  }catch(e){st("연결 실패:\n"+e.message,"bad");}
+}
+function disc(){ $("connectBtn").disabled=false;$("disconnectBtn").disabled=true;cmdChara=null;setCommandButtons(false);st("연결 해제됨","warnText");}
+async function disconnect(){try{if(chara){chara.removeEventListener("characteristicvaluechanged",notify);try{await chara.stopNotifications();}catch{}} if(device&&device.gatt.connected)device.gatt.disconnect();}catch{} disc();}
+function clearAll(){samples=[];buf="";viewEnd=0;followLive=true;const lf=$("liveFollow");if(lf)lf.checked=true;$("csvBox").value="";stats();drawAll();}
+function csvFile(){
+  let rows=["time_ms,raw_count,resistance_ohm,delta_percent"];
+  if(!samples.length)return rows.join("\n");
+  for(let s of samples){
+    rows.push(`${relativeMs(s)},${s.raw??""},${s.resistance??""},${s.deltaRaw??""}`);
+  }
+  return rows.join("\n");
+}
+function csvView(){
+  let rows=["Time | Raw | Resistance | ΔR/R0"];
+  rows.push("-----|-----|------------|--------");
+  if(!samples.length)return rows.join("\n");
+  for(let s of samples){
+    const time=relativeMs(s)+" ms";
+    const raw=Number.isFinite(s.raw)?s.raw.toFixed(1)+" count":"-";
+    const res=Number.isFinite(s.resistance)?s.resistance.toFixed(1)+" Ω":"-";
+    const delta=Number.isFinite(s.deltaRaw)?s.deltaRaw.toFixed(3)+" %":"-";
+    rows.push(`${time} | ${raw} | ${res} | ${delta}`);
+  }
+  return rows.join("\n");
+}
+function save(){if(!samples.length){st("저장할 데이터가 없습니다.","warnText");return;} const b=new Blob([csvFile()],{type:"text/csv"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="strain_sensor_data.csv";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
+function showCsv(){let box=$("csvBox"); box.style.display=box.style.display=="block"?"none":"block"; if(box.style.display=="block"){box.value=csvView();box.focus();box.select();}}
+async function copyCsv(){if(!samples.length){st("복사할 데이터가 없습니다.","warnText");return;}try{await navigator.clipboard.writeText(csvView());st("CSV 복사됨","ok");}catch{showCsv();st("자동 복사가 막혔습니다. CSV 상자를 길게 눌러 복사하세요.","warnText");}}
+async function shareCsv(){if(!samples.length){st("공유할 데이터가 없습니다.","warnText");return;}try{let file=new File([csvFile()],"strain_sensor_data.csv",{type:"text/csv"}); if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({files:[file],title:"strain_sensor_data.csv"}); else if(navigator.share)await navigator.share({title:"strain_sensor_data.csv",text:csvView()}); else showCsv();}catch{}}
+function startDemo(){if(demo){stopDemo();return;} clearAll();let k=0;$("demoBtn").textContent="Demo 정지";demo=setInterval(()=>{let raw=1730+30*Math.sin(k*.08)+2*(Math.random()-.5);let res=730+50*Math.sin(k*.08)+5*(Math.random()-.5);let fres=730+45*Math.sin(k*.07);let dRaw=0.2+0.35*Math.sin(k*.08)+0.05*(Math.random()-.5);let dFilt=0.2+0.25*Math.sin(k*.07);add({raw,resistance:res,deltaRaw:dRaw});k++;},50);}
+function stopDemo(){if(demo){clearInterval(demo);demo=null;$("demoBtn").textContent="Demo";}}
+function bindTapLikeButton(el,fn){
+  let sx=0,sy=0,moved=false;
+  let touchMode=false;
+  let lastTouchAction=0;
+  const press=()=>el.classList.add("pressed");
+  const release=()=>el.classList.remove("pressed");
+  const action=e=>{
+    release();
+    if(e)e.preventDefault();
+    fn(e);
+  };
+
+  // iPad/Bluefy에서는 touchend와 click이 둘 다 들어오면서 토글이 두 번 실행되는 문제가 생길 수 있다.
+  // 그래서 터치가 한 번이라도 감지된 요소는 이후 click 이벤트를 완전히 무시하고 touchend만 사용한다.
+  el.addEventListener("touchstart",e=>{
+    touchMode=true;
+    const t=e.changedTouches[0];
+    sx=t.clientX; sy=t.clientY; moved=false;
+    press();
+  },{passive:true});
+
+  el.addEventListener("touchmove",e=>{
+    const t=e.changedTouches[0];
+    if(Math.hypot(t.clientX-sx,t.clientY-sy)>12){
+      moved=true;
+      release();
+    }
+  },{passive:true});
+
+  el.addEventListener("touchend",e=>{
+    if(moved){release();return;}
+    const now=Date.now();
+    // 같은 터치에서 touchend가 중복 발생하는 극단적인 경우만 차단. 연속 탭은 막지 않음.
+    if(now-lastTouchAction<40){e.preventDefault();return;}
+    lastTouchAction=now;
+    action(e);
+  },{passive:false});
+
+  el.addEventListener("touchcancel",release,{passive:true});
+
+  // PC/마우스 시각 효과
+  el.addEventListener("pointerdown",e=>{if(e.pointerType!=="touch")press();},{passive:true});
+  el.addEventListener("pointerup",e=>{if(e.pointerType!=="touch")release();},{passive:true});
+  el.addEventListener("pointercancel",release,{passive:true});
+  el.addEventListener("pointerleave",release,{passive:true});
+
+  // PC는 click으로 실행. iPad/터치 환경에서 늦게 들어오는 click은 무조건 무시.
+  el.addEventListener("click",e=>{
+    if(touchMode){
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    action(e);
+  },{passive:false});
+}
+function bindButton(id,fn){bindTapLikeButton($(id),fn);}
+bindButton("connectBtn",connect);
+bindButton("disconnectBtn",disconnect);
+bindButton("clearBtn",clearAll);
+bindButton("resetZoomBtn",resetZoom);
+bindButton("csvBtn",save);
+bindButton("showCsvBtn",showCsv);
+bindButton("copyCsvBtn",copyCsv);
+bindButton("shareCsvBtn",shareCsv);
+bindButton("demoBtn",startDemo);
+bindButton("pauseBtn",()=>{paused=!paused;$("pauseBtn").textContent=paused?"다시 그리기":"일시정지";if(!paused)drawAll();});
+bindButton("setRrefBtn",setRrefFromInput);
+bindButton("calR0Btn",calibrateR0FromSite);
+bindButton("setRrefCalBtn",setRrefAndCalibrateFromSite);
+bindButton("recommendRrefBtn",()=>updateRrefRecommendation(true));
+bindButton("waveRecommendRrefBtn",recommendRrefFromWaveform);
+function bindLiveFollow(){
+  const box=$("liveFollow");
+  if(!box)return;
+  let sx=0,sy=0,moved=false,last=0;
+  const apply=e=>{
+    const now=Date.now();
+    if(now-last<140){if(e)e.preventDefault();return;}
+    last=now;
+    if(e)e.preventDefault();
+    setLive(!followLive);
+  };
+  box.parentElement.addEventListener("touchstart",e=>{const t=e.changedTouches[0];sx=t.clientX;sy=t.clientY;moved=false;},{passive:true});
+  box.parentElement.addEventListener("touchmove",e=>{const t=e.changedTouches[0];if(Math.hypot(t.clientX-sx,t.clientY-sy)>12)moved=true;},{passive:true});
+  box.parentElement.addEventListener("touchend",e=>{if(!moved)apply(e);},{passive:false});
+  box.parentElement.addEventListener("click",apply,{passive:false});
+}
+bindLiveFollow();
+$("windowSize").oninput=()=>{if(followLive)viewEnd=samples.length;drawAll();};
+["deltaScale","resScale","rawScale","deltaMin","deltaMax","resMin","resMax","rawMin","rawMax"].forEach(id=>$(id).oninput=()=>{yView={};updateCustomUI();drawAll();});
+function refreshCheckUI(){
+  document.querySelectorAll(".checkItem").forEach(label=>{
+    const cb=label.querySelector("input.channelCheck");
+    if(cb)label.classList.toggle("selected",cb.checked);
+  });
+}
+function bindCheckItem(label){
+  const cb=label.querySelector("input.channelCheck");
+  if(!cb)return;
+  const toggle=e=>{
+    cb.checked=!cb.checked;
+    refreshCheckUI();
+    ensureGraphs();
+  };
+  // 체크박스도 버튼과 같은 탭 판정 사용: 스크롤 시작이면 토글 안 함
+  bindTapLikeButton(label,toggle);
+}
+document.querySelectorAll(".checkItem").forEach(bindCheckItem);
+function bindFastPress(el){
+  const down=()=>el.classList.add("pressed");
+  const up=()=>el.classList.remove("pressed");
+  el.addEventListener("pointerdown",down,{passive:true});
+  el.addEventListener("pointerup",up,{passive:true});
+  el.addEventListener("pointercancel",up,{passive:true});
+  el.addEventListener("pointerleave",up,{passive:true});
+  el.addEventListener("touchstart",down,{passive:true});
+  el.addEventListener("touchend",up,{passive:true});
+}
+
+setCommandButtons(false);
+updateCustomUI();refreshCheckUI();ensureGraphs();stats();
+</script>
+</body>
+</html>
